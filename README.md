@@ -61,22 +61,6 @@ project file tiny and avoids any copyrighted media being baked into a repo.
 - If a projector browser is old or weak on WebGL, use a laptop over HDMI
   instead — the app itself is the same page either way.
 
-## GitHub Pages
-
-This repo deploys with GitHub Actions (`.github/workflows/pages.yml`),
-serving the static site from the repo root — not the old "deploy from a
-branch" mode.
-
-**One setting you must turn on once, after creating the repo on GitHub:**
-
-> Repository → **Settings → Pages → Build and deployment → Source →
-> GitHub Actions**
-
-Until that is set, the workflow can run but GitHub will not publish the
-site. After that, every push to the default branch deploys automatically,
-and the site URL is shown on the repo's Pages settings page
-(`https://<username>.github.io/<repo>/`).
-
 ## Limitations
 
 - Flat quad surfaces only — no curved-surface mesh warping, no
