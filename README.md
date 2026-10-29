@@ -20,10 +20,16 @@ Tecaki in mind), used in a single window on the projector itself.
    file (video loops). Or pick a solid colour.
 4. Add more surfaces with **+ Add surface**. Surfaces render in list order
    (later surfaces draw on top); use the ↑ / ↓ buttons to reorder.
-5. Click **Output mode** (or press **F**) to hide all UI and show only the
+5. For accurate mapping, use **Full-width edit**: the canvas stays
+   full-window (exactly as in output mode) and the panel floats over it
+   instead of shrinking it, so the shape you drag is the shape the
+   projector shows. Hide the panel with **◀ Hide panel** (or press **H**)
+   to drag corners at full size, and show it again with **☰ Show panel**
+   (or **H**) to change settings — hiding/showing never resizes the canvas.
+6. Click **Output mode** (or press **F**) to hide all UI and show only the
    black canvas. Press **F** again, or the small ✕ button, to return to the
    editor. Use the **Fullscreen** button for a true full-screen projection.
-6. Use **Save project** / **Load project** to keep your corner layouts.
+7. Use **Save project** / **Load project** to keep your corner layouts.
 
 ## How the warp works
 
