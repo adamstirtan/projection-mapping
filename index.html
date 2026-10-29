@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Projection Mapper</title>
+<style>
+  :root{color-scheme:dark;--bg:#0d0f12;--panel:#171b21;--panel2:#1f242c;--line:#2d3540;--text:#e8ecf1;--muted:#9aa7b5;--accent:#ffb020;--accent2:#35c4ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#000;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  button,input,select{font:inherit;color:var(--text)}
+  button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer}
+  button:hover{border-color:var(--accent2)}
+  button.primary{background:#3a2a00;border-color:var(--accent);color:#ffd98a}
+  button.danger{border-color:#7a2e2e;color:#ff9a9a}
+  input[type=text],input[type=number],select{background:#0f141a;border:1px solid var(--line);border-radius:7px;padding:6px 8px;width:100%}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=color]{width:100%;height:34px;padding:2px;background:#0f141a;border:1px solid var(--line);border-radius:7px}
+  .app{display:grid;grid-template-columns:300px 1fr;height:100vh}
+  aside{background:var(--bg);border-right:1px solid var(--line);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+  h1{font-size:18px;margin:0}
+  h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}
+  h2:first-child{margin-top:0}
+  p{color:var(--muted);font-size:13px;line-height:1.5;margin:6px 0}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .row>*{flex:1}
+  .row>button{flex:1 1 auto}
+  .surface{border:1px solid var(--line);border-radius:10px;padding:9px;background:var(--panel);cursor:pointer}
+  .surface.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .surface .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .surface .meta{font-size:12px;color:var(--muted)}
+  .surface .minirow{display:flex;gap:6px;margin-top:8px}
+  .surface .minirow button{padding:4px 6px;font-size:12px}
+  label{font-size:12px;color:var(--muted);display:block;margin:10px 0 4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{color:var(--muted);text-align:left;font-weight:500;padding:3px}
+  td{padding:3px}
+  td input{padding:4px 6px}
+  .warn{background:#3a2a00;border:1px solid #6b4d00;border-radius:8px;padding:8px;font-size:13px;color:#ffd98a}
+  .stage{position:relative;background:#000;overflow:hidden;min-width:0}
+  canvas#gl{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none}
+  #grid{position:absolute;inset:0;pointer-events:none;display:none;
+    background-image:linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px);
+    background-size:10% 10%}
+  body.editor #grid.on{display:block}
+  .handle{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid #fff;background:var(--accent);box-shadow:0 0 0 3px rgba(0,0,0,.6);cursor:grab;touch-action:none;z-index:5}
+  .handle:active{cursor:grabbing;transform:scale(1.15)}
+  .handle::after{content:"";position:absolute;inset:7px;border-radius:50%;background:#000}
+  .topbar{position:absolute;top:10px;right:10px;z-index:10;display:flex;gap:8px}
+  .topbar button{background:rgba(15,20,26,.9)}
+  /* Output mode: hide all UI except a small exit control. */
+  body.output aside,body.output #grid,body.output .handle{display:none !important}
+  body.output .app{display:block;height:100vh}
+  body.output .stage{width:100vw;height:100vh}
+  body.output #exitOutput{opacity:.25}
+  body.output #exitOutput:hover{opacity:1}
+  #exitOutput{display:none}
+  body.output #exitOutput{display:block}
+  @media (max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:46vh 1fr}aside{border-right:0;border-top:1px solid var(--line);order:2}.stage{order:1}}
+</style>
+</head>
+<body class="editor">
+<div class="app">
+  <aside id="panel">
+    <div>
+      <h1>Projection Mapper</h1>
+      <p>Free, offline, no account, no ads. Drag the orange handles to warp a surface onto a real wall or object.</p>
+      <div class="row">
+        <button id="modeBtn" class="primary" title="Or press F">▶ Output mode (F)</button>
+        <button id="fsBtn">⛶ Fullscreen</button>
+      </div>
+      <p><strong>Output mode</strong> hides this panel and shows only the black canvas. Press <strong>F</strong> (or the Exit button) to come back. On a projector, open this page on the projector itself and use Output mode — no second window is needed.</p>
+    </div>
+
+    <div>
+      <h2>Surfaces</h2>
+      <div class="row"><button id="addSurface">+ Add surface</button></div>
+      <div id="surfaceList" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"></div>
+    </div>
+
+    <div id="detail">
+      <h2>Selected surface</h2>
+      <label for="surfName">Name</label>
+      <input id="surfName" type="text">
+      <label for="sourceType">Source</label>
+      <select id="sourceType">
+        <option value="test">Test pattern</option>
+        <option value="colour">Solid colour</option>
+        <option value="image">Image (upload)</option>
+        <option value="video">Video (upload, loops)</option>
+      </select>
+      <div id="colourWrap" style="display:none"><label for="surfColour">Colour</label><input id="surfColour" type="color" value="#ff3020"></div>
+      <div id="uploadWrap" style="display:none">
+        <label for="mediaFile">Media file</label>
+        <input id="mediaFile" type="file" accept="image/*,video/*">
+        <p id="mediaNote"></p>
+      </div>
+      <div id="mediaMissing" class="warn" style="display:none">Media is <strong>not</strong> saved in a project file. Re-upload the file shown in the surface list after loading a project.</div>
+      <label for="opacity">Opacity: <span id="opacityVal">100%</span></label>
+      <input id="opacity" type="range" min="0" max="100" value="100">
+      <h2>Corners (percent of canvas)</h2>
+      <table>
+        <tr><th></th><th>X %</th><th>Y %</th></tr>
+        <tr><td>Top-left</td><td><input data-corner="0" data-axis="0" type="number" min="0" max="100" step="0.5"></td><td><input data-corner="0" data-axis="1" type="number" min="0" max="100" step="0.5"></td></tr>
+        <tr><td>Top-right</td><td><input data-corner="1" data-axis="0" type="number" min="0" max="100" step="0.5"></td><td><input data-corner="1" data-axis="1" type="number" min="0" max="100" step="0.5"></td></tr>
+        <tr><td>Bottom-right</td><td><input data-corner="2" data-axis="0" type="number" min="0" max="100" step="0.5"></td><td><input data-corner="2" data-axis="1" type="number" min="0" max="100" step="0.5"></td></tr>
+        <tr><td>Bottom-left</td><td><input data-corner="3" data-axis="0" type="number" min="0" max="100" step="0.5"></td><td><input data-corner="3" data-axis="1" type="number" min="0" max="100" step="0.5"></td></tr>
+      </table>
+      <div class="row" style="margin-top:10px">
+        <button id="resetCorners">Reset corners</button>
+        <button id="deleteSurface" class="danger">Delete</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>Editor &amp; project</h2>
+      <label><input id="gridToggle" type="checkbox" checked style="width:auto"> Grid overlay (editor only)</label>
+      <label><input id="patternToggle" type="checkbox" style="width:auto"> Show test pattern on every surface (temporary)</label>
+      <div class="row" style="margin-top:8px">
+        <button id="saveBtn">⬇ Save project</button>
+        <button id="loadBtn">⬆ Load project</button>
+      </div>
+      <input id="loadFile" type="file" accept="application/json,.json" style="display:none">
+      <p><strong>Important:</strong> a saved project stores corner positions, opacity, surface order, media type and media file <em>name</em> only. Media files themselves are <strong>not</strong> saved — re-upload them after loading.</p>
+      <p>Tip: start with the test pattern, align the four corners to the real surface, then switch the source to your image or video. Keep the projector as square-on to the surface as you can; extreme angles lose resolution.</p>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="gl"></canvas>
+    <div id="grid"></div>
+    <div class="topbar">
+      <button id="exitOutput" title="Or press F">✕ Exit output</button>
+    </div>
+  </main>
+</div>
+
+<script>
+'use strict';
+/* ---------- Homography: unit square -> quad (true perspective, not affine) ----------
+   Solve for H (h33 = 1) mapping (0,0)->TL, (1,0)->TR, (1,1)->BR, (0,1)->BL.
+   For each correspondence: X = (h00*u + h01*v + h02) / (h20*u + h21*v + 1), same for Y.
+   This is solved with Gaussian elimination with partial pivoting. */
+function solveHomography(quad){
+  // quad: [[x,y]x4] in clip space (or any consistent 2-D space), order TL,TR,BR,BL.
+  var src=[[0,0],[1,0],[1,1],[0,1]];
+  var A=[], b=[];
+  for(var i=0;i<4;i++){
+    var u=src[i][0], v=src[i][1], X=quad[i][0], Y=quad[i][1];
+    A.push([u,v,1,0,0,0,-X*u,-X*v]); b.push(X);
+    A.push([0,0,0,u,v,1,-Y*u,-Y*v]); b.push(Y);
+  }
+  // Gaussian elimination, 8x8.
+  var n=8;
+  for(var col=0,row=0; col<n && row<n; col++,row++){
+    var piv=row, best=Math.abs(A[row][col]);
+    for(var r=row+1;r<n;r++){ if(Math.abs(A[r][col])>best){best=Math.abs(A[r][col]); piv=r;} }
+    if(best<1e-12) throw new Error('Degenerate quad: corners are collinear or coincident');
+    if(piv!==row){ var t=A[piv]; A[piv]=A[row]; A[row]=t; var tb=b[piv]; b[piv]=b[row]; b[row]=tb; }
+    var div=A[row][col];
+    for(var c=col;c<n;c++) A[row][c]/=div;
+    b[row]/=div;
+    for(var r2=0;r2<n;r2++){
+      if(r2===row) continue;
+      var f=A[r2][col];
+      if(f===0) continue;
+      for(var c2=col;c2<n;c2++) A[r2][c2]-=f*A[row][c2];
+      b[r2]-=f*b[row];
+    }
+  }
+  var h=b.slice(0,8); // h00,h01,h02,h10,h11,h12,h20,h21 ; h22 = 1
+  return [h[0],h[1],h[2], h[3],h[4],h[5], h[6],h[7],1];
+}
+function applyHomography(H, u, v){
+  var x=H[0]*u+H[1]*v+H[2], y=H[3]*u+H[4]*v+H[5], w=H[6]*u+H[7]*v+H[8];
+  return [x/w, y/w];
+}
+// Expose for testing in a browser console / node extraction.
+if(typeof window!=='undefined'){ window.__solveHomography=solveHomography; window.__applyHomography=applyHomography; }
+
+/* ---------- State ---------- */
+var stage=document.getElementById('stage');
+var canvas=document.getElementById('gl');
+var gridEl=document.getElementById('grid');
+var surfaces=[]; var selectedId=null; var nextId=1;
+var showGrid=true, showPatternEverywhere=false;
+function defaultCorners(){ return [[0.08,0.08],[0.92,0.08],[0.92,0.92],[0.08,0.92]]; }
+function makeSurface(name){
+  return {id:nextId++, name:name||('Surface '+(nextId-1)), source:'test', colour:'#ff3020',
+    corners:defaultCorners(), opacity:1, mediaName:'', mediaURL:'', mediaEl:null,
+    texture:null, textureReady:false, textureSource:null, missingMedia:false};
+}
+function selected(){ return surfaces.find(function(s){return s.id===selectedId;}) || surfaces[0]; }
+
+/* ---------- Test pattern ---------- */
+function makeTestPattern(){
+  var c=document.createElement('canvas'); c.width=512; c.height=512;
+  var g=c.getContext('2d');
+  g.fillStyle='#111'; g.fillRect(0,0,512,512);
+  for(var y=0;y<8;y++) for(var x=0;x<8;x++){ if((x+y)%2===0){ g.fillStyle='#ddd'; g.fillRect(x*64,y*64,64,64);} }
+  g.strokeStyle='#ff3020'; g.lineWidth=4; g.strokeRect(4,4,504,504);
+  g.beginPath(); g.moveTo(0,0); g.lineTo(512,512); g.moveTo(512,0); g.lineTo(0,512); g.stroke();
+  g.strokeStyle='#35c4ff'; g.beginPath(); g.arc(256,256,120,0,Math.PI*2); g.stroke();
+  g.beginPath(); g.arc(256,256,60,0,Math.PI*2); g.stroke();
+  g.fillStyle='#fff'; g.font='bold 44px sans-serif'; g.textAlign='center'; g.fillText('TEST',256,270);
+  g.font='20px sans-serif'; g.fillText('TL        TR',256,40); g.fillText('BL        BR',256,490);
+  return c;
+}
+var testCanvas=makeTestPattern();
+function colourCanvas(hex){
+  var c=document.createElement('canvas'); c.width=4; c.height=4;
+  var g=c.getContext('2d'); g.fillStyle=hex; g.fillRect(0,0,4,4); return c;
+}
+
+/* ---------- WebGL ---------- */
+var gl=canvas.getContext('webgl',{premultipliedAlpha:false,alpha:true}) || canvas.getContext('experimental-webgl');
+if(!gl){ document.body.innerHTML='<p style="padding:20px">This browser does not support WebGL, which this mapper needs.</p>'; throw new Error('No WebGL'); }
+function compile(type, src){
+  var sh=gl.createShader(type); gl.shaderSource(sh,src); gl.compileShader(sh);
+  if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+var prog=gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER,
+  'attribute vec2 aPos; uniform mat3 uH; varying vec2 vUv;'+
+  'void main(){ vec3 p = uH * vec3(aPos, 1.0); gl_Position = vec4(p.xy, 0.0, p.z); vUv = aPos; }'));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER,
+  'precision mediump float; uniform sampler2D uTex; uniform float uOpacity; varying vec2 vUv;'+
+  'void main(){ vec4 c = texture2D(uTex, vUv); gl_FragColor = vec4(c.rgb, c.a * uOpacity); }'));
+gl.linkProgram(prog); gl.useProgram(prog);
+var aPosLoc=gl.getAttribLocation(prog,'aPos');
+var uHLoc=gl.getUniformLocation(prog,'uH');
+var uTexLoc=gl.getUniformLocation(prog,'uTex');
+var uOpLoc=gl.getUniformLocation(prog,'uOpacity');
+var buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 1,1, 0,1]), gl.STATIC_DRAW);
+var idx=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idx);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2, 0,2,3]), gl.STATIC_DRAW);
+gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+function ensureTexture(s){
+  if(!s.texture) s.texture=gl.createTexture();
+  return s.texture;
+}
+function uploadSource(s, source){
+  var tex=ensureTexture(s);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  s.textureReady=true;
+}
+function refreshSurfaceTexture(s){
+  if(showPatternEverywhere){ if(s.textureSource!==testCanvas){ uploadSource(s,testCanvas); s.textureSource=testCanvas; } return; }
+  if(s.source==='test'){ if(s.textureSource!==testCanvas){ uploadSource(s,testCanvas); s.textureSource=testCanvas; } }
+  else if(s.source==='colour'){ var cc=colourCanvas(s.colour); uploadSource(s,cc); s.textureSource=null; }
+  else if(s.source==='image' || s.source==='video'){
+    if(s.mediaEl){ uploadSource(s,s.mediaEl); s.textureSource=s.mediaEl; }
+    else { if(s.textureSource!==testCanvas){ uploadSource(s,testCanvas); s.textureSource=testCanvas; } }
+  }
+}
+function resizeCanvas(){
+  var r=stage.getBoundingClientRect();
+  var dpr=Math.min(window.devicePixelRatio||1, 2);
+  var w=Math.max(2,Math.round(r.width*dpr)), h=Math.max(2,Math.round(r.height*dpr));
+  if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+function render(){
+  resizeCanvas();
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(aPosLoc);
+  gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idx);
+  surfaces.forEach(function(s){
+    refreshSurfaceTexture(s);
+    // Video textures must be re-uploaded every frame.
+    if(!showPatternEverywhere && s.source==='video' && s.mediaEl && s.mediaEl.readyState>=2) uploadSource(s,s.mediaEl);
+    if(!s.textureReady) return;
+    var clip=s.corners.map(function(p){ return [2*p[0]-1, 1-2*p[1]]; });
+    var H;
+    try{ H=solveHomography(clip); }catch(e){ return; } // degenerate quad: skip, handles stay editable
+    // GLSL mat3 is column-major: transpose the row-major H.
+    gl.uniformMatrix3fv(uHLoc, false, new Float32Array([H[0],H[3],H[6], H[1],H[4],H[7], H[2],H[5],H[8]]));
+    gl.uniform1f(uOpLoc, s.opacity);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, s.texture);
+    gl.uniform1i(uTexLoc, 0);
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+  });
+  positionHandles();
+  requestAnimationFrame(render);
+}
+
+/* ---------- Editor UI ---------- */
+var listEl=document.getElementById('surfaceList');
+var nameEl=document.getElementById('surfName');
+var sourceEl=document.getElementById('sourceType');
+var colourEl=document.getElementById('surfColour');
+var colourWrap=document.getElementById('colourWrap');
+var uploadWrap=document.getElementById('uploadWrap');
+var mediaFileEl=document.getElementById('mediaFile');
+var mediaNoteEl=document.getElementById('mediaNote');
+var mediaMissingEl=document.getElementById('mediaMissing');
+var opacityEl=document.getElementById('opacity');
+var opacityVal=document.getElementById('opacityVal');
+var cornerInputs=document.querySelectorAll('[data-corner]');
+
+function renderList(){
+  listEl.innerHTML='';
+  surfaces.forEach(function(s, i){
+    var div=document.createElement('div');
+    div.className='surface'+(s.id===selectedId?' selected':'');
+    var label=s.source==='test'?'Test pattern':s.source==='colour'?'Solid colour':(s.source==='video'?'Video':'Image');
+    div.innerHTML='<div class="name"></div><div class="meta"></div><div class="minirow"></div>';
+    div.querySelector('.name').textContent=s.name;
+    div.querySelector('.meta').textContent=label+(s.mediaName?' · '+s.mediaName:'')+(s.missingMedia?' · media needed':'');
+    var up=document.createElement('button'); up.textContent='↑'; up.title='Move up';
+    up.onclick=function(e){ e.stopPropagation(); if(i>0){ var t=surfaces[i-1]; surfaces[i-1]=s; surfaces[i]=t; renderList(); } };
+    var dn=document.createElement('button'); dn.textContent='↓'; dn.title='Move down';
+    dn.onclick=function(e){ e.stopPropagation(); if(i<surfaces.length-1){ var t2=surfaces[i+1]; surfaces[i+1]=s; surfaces[i]=t2; renderList(); } };
+    div.querySelector('.minirow').append(up,dn);
+    div.onclick=function(){ selectedId=s.id; syncDetail(); renderList(); };
+    listEl.appendChild(div);
+  });
+}
+function syncDetail(){
+  var s=selected(); if(!s) return;
+  nameEl.value=s.name; sourceEl.value=s.source; colourEl.value=s.colour;
+  colourWrap.style.display=s.source==='colour'?'block':'none';
+  uploadWrap.style.display=(s.source==='image'||s.source==='video')?'block':'none';
+  mediaNoteEl.textContent=s.mediaName?('Loaded: '+s.mediaName):'No file loaded yet.';
+  mediaMissingEl.style.display=s.missingMedia?'block':'none';
+  opacityEl.value=Math.round(s.opacity*100); opacityVal.textContent=Math.round(s.opacity*100)+'%';
+  cornerInputs.forEach(function(inp){
+    var c=+inp.getAttribute('data-corner'), a=+inp.getAttribute('data-axis');
+    inp.value=(s.corners[c][a]*100).toFixed(1);
+  });
+  renderList();
+}
+var handleSurfaceId=null;
+function positionHandles(){
+  // Reuse handle elements across frames: recreating them every frame would
+  // break an in-progress pointer drag (capture is lost when the node is removed).
+  if(document.body.classList.contains('output')){
+    document.querySelectorAll('.handle').forEach(function(h){ h.remove(); });
+    handleSurfaceId=null; return;
+  }
+  var s=selected(); if(!s) return;
+  var existing=document.querySelectorAll('.handle');
+  if(handleSurfaceId!==s.id || existing.length!==4){
+    existing.forEach(function(h){ h.remove(); });
+    handleSurfaceId=s.id;
+  } else {
+    // Just reposition the existing handles; their drag listeners stay attached.
+    existing.forEach(function(h, i){
+      h.style.left=(s.corners[i][0]*100)+'%'; h.style.top=(s.corners[i][1]*100)+'%';
+    });
+    return;
+  }
+  s.corners.forEach(function(p, i){
+    var h=document.createElement('div'); h.className='handle'; h.dataset.corner=i;
+    h.style.left=(p[0]*100)+'%'; h.style.top=(p[1]*100)+'%';
+    h.setAttribute('aria-label','Corner '+(i+1));
+    h.addEventListener('pointerdown', function(e){
+      e.preventDefault(); h.setPointerCapture(e.pointerId);
+      var move=function(ev){
+        var rect=stage.getBoundingClientRect();
+        var nx=Math.min(1,Math.max(0,(ev.clientX-rect.left)/rect.width));
+        var ny=Math.min(1,Math.max(0,(ev.clientY-rect.top)/rect.height));
+        s.corners[i]=[nx,ny]; syncDetail();
+      };
+      var up=function(){ h.removeEventListener('pointermove',move); h.removeEventListener('pointerup',up); };
+      h.addEventListener('pointermove',move); h.addEventListener('pointerup',up);
+    });
+    stage.appendChild(h);
+  });
+}
+document.getElementById('addSurface').onclick=function(){
+  var s=makeSurface(); surfaces.push(s); selectedId=s.id; syncDetail();
+};
+document.getElementById('deleteSurface').onclick=function(){
+  var s=selected(); if(!s) return;
+  surfaces=surfaces.filter(function(x){return x.id!==s.id;});
+  if(!surfaces.length) surfaces.push(makeSurface('Surface 1'));
+  selectedId=surfaces[0].id; syncDetail();
+};
+nameEl.oninput=function(){ var s=selected(); if(s){ s.name=nameEl.value||'Surface'; renderList(); } };
+sourceEl.onchange=function(){
+  var s=selected(); if(!s) return;
+  s.source=sourceEl.value; s.textureSource=null;
+  if((s.source==='image'||s.source==='video') && !s.mediaEl) s.missingMedia=true;
+  if(s.source==='test'||s.source==='colour') s.missingMedia=false;
+  syncDetail();
+};
+colourEl.oninput=function(){ var s=selected(); if(s){ s.colour=colourEl.value; s.textureSource=null; } };
+opacityEl.oninput=function(){ var s=selected(); if(s){ s.opacity=opacityEl.value/100; opacityVal.textContent=opacityEl.value+'%'; } };
+mediaFileEl.onchange=function(){
+  var s=selected(); if(!s||!mediaFileEl.files[0]) return;
+  var file=mediaFileEl.files[0];
+  if(s.mediaURL) URL.revokeObjectURL(s.mediaURL);
+  s.mediaURL=URL.createObjectURL(file); s.mediaName=file.name; s.missingMedia=false; s.textureSource=null;
+  if(s.source==='video'){
+    var v=document.createElement('video'); v.src=s.mediaURL; v.loop=true; v.muted=true; v.playsInline=true; v.autoplay=true;
+    v.play().catch(function(){});
+    s.mediaEl=v;
+  } else {
+    var img=new Image();
+    img.onload=function(){ s.mediaEl=img; };
+    img.src=s.mediaURL; s.mediaEl=null; // set on load; test pattern shows meanwhile
+    // Keep a reference so the image is not GC'd before load.
+    s._img=img;
+  }
+  syncDetail();
+};
+cornerInputs.forEach(function(inp){
+  inp.onchange=function(){
+    var s=selected(); if(!s) return;
+    var c=+inp.getAttribute('data-corner'), a=+inp.getAttribute('data-axis');
+    var v=Math.min(100,Math.max(0,parseFloat(inp.value)||0))/100;
+    s.corners[c][a]=v; syncDetail();
+  };
+});
+document.getElementById('resetCorners').onclick=function(){ var s=selected(); if(s){ s.corners=defaultCorners(); syncDetail(); } };
+document.getElementById('gridToggle').onchange=function(e){ showGrid=e.target.checked; gridEl.classList.toggle('on',showGrid); };
+document.getElementById('patternToggle').onchange=function(e){ showPatternEverywhere=e.target.checked; surfaces.forEach(function(s){ s.textureSource=null; }); };
+
+/* ---------- Output mode ---------- */
+function setOutput(on){
+  document.body.classList.toggle('output', on);
+  document.body.classList.toggle('editor', !on);
+  document.getElementById('modeBtn').textContent=on?'✕ Exit output (F)':'▶ Output mode (F)';
+  if(on){ gridEl.classList.remove('on'); }
+  else { gridEl.classList.toggle('on', showGrid); }
+}
+function toggleOutput(){ setOutput(!document.body.classList.contains('output')); }
+document.getElementById('modeBtn').onclick=toggleOutput;
+document.getElementById('exitOutput').onclick=function(){ setOutput(false); if(document.fullscreenElement) document.exitFullscreen().catch(function(){}); };
+document.getElementById('fsBtn').onclick=function(){
+  if(document.fullscreenElement) document.exitFullscreen().catch(function(){});
+  else document.documentElement.requestFullscreen().catch(function(){});
+};
+document.addEventListener('keydown', function(e){
+  if(e.key==='f'||e.key==='F'){ if(document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='SELECT'||document.activeElement.tagName==='TEXTAREA')) return; toggleOutput(); }
+  if(e.key==='Escape' && document.body.classList.contains('output')) setOutput(false);
+});
+
+/* ---------- Save / load (media files are NOT saved) ---------- */
+document.getElementById('saveBtn').onclick=function(){
+  var data={app:'projection-mapper', version:1, surfaces:surfaces.map(function(s){
+    return {name:s.name, source:s.source, colour:s.colour, corners:s.corners, opacity:s.opacity, mediaName:s.mediaName};
+  })};
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='projection-project.json'; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+};
+document.getElementById('loadBtn').onclick=function(){ document.getElementById('loadFile').click(); };
+document.getElementById('loadFile').onchange=function(){
+  var f=document.getElementById('loadFile').files[0]; if(!f) return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var data=JSON.parse(reader.result);
+      if(!data.surfaces || !Array.isArray(data.surfaces)) throw new Error('No surfaces array');
+      surfaces=data.surfaces.map(function(raw, i){
+        var s=makeSurface(raw.name||('Surface '+(i+1)));
+        s.source=['test','colour','image','video'].indexOf(raw.source)>=0?raw.source:'test';
+        s.colour=raw.colour||'#ff3020';
+        s.corners=Array.isArray(raw.corners)&&raw.corners.length===4?raw.corners.map(function(p){return [Math.min(1,Math.max(0,+p[0]||0)),Math.min(1,Math.max(0,+p[1]||0))];}):defaultCorners();
+        s.opacity=typeof raw.opacity==='number'?Math.min(1,Math.max(0,raw.opacity)):1;
+        s.mediaName=raw.mediaName||'';
+        s.missingMedia=(s.source==='image'||s.source==='video');
+        return s;
+      });
+      if(!surfaces.length) surfaces.push(makeSurface('Surface 1'));
+      selectedId=surfaces[0].id; syncDetail();
+    }catch(err){ alert('Could not load that project file: '+err.message); }
+  };
+  reader.readAsText(f);
+  document.getElementById('loadFile').value='';
+};
+
+/* ---------- Init ---------- */
+surfaces.push(makeSurface('Surface 1'));
+selectedId=surfaces[0].id;
+gridEl.classList.toggle('on', showGrid);
+syncDetail();
+window.addEventListener('resize', resizeCanvas);
+render();
+</script>
+</body>
+</html>
