@@ -43,6 +43,19 @@
     background-image:linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px);
     background-size:10% 10%}
   body.editor #grid.on{display:block}
+  body.fullwidth #grid.on{display:block}
+  /* Full-width edit mode: the canvas is always full-window, exactly like
+     output mode, so dragging corners here does not shift when you switch
+     to output. The panel becomes a floating overlay that slides away
+     instead of shrinking the canvas. */
+  body.fullwidth .app{display:block;height:100vh}
+  body.fullwidth .stage{width:100vw;height:100vh}
+  body.fullwidth aside{position:absolute;left:0;top:0;bottom:0;width:320px;z-index:20;box-shadow:4px 0 24px rgba(0,0,0,.6);transition:transform .2s ease}
+  body.fullwidth.panel-hidden aside{transform:translateX(-105%)}
+  #expandPanel{display:none}
+  body.fullwidth.panel-hidden #expandPanel{display:block}
+  body.fullwidth #collapsePanel{display:block}
+  #collapsePanel{display:none}
   .handle{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid #fff;background:var(--accent);box-shadow:0 0 0 3px rgba(0,0,0,.6);cursor:grab;touch-action:none;z-index:5}
   .handle:active{cursor:grabbing;transform:scale(1.15)}
   .handle::after{content:"";position:absolute;inset:7px;border-radius:50%;background:#000}
@@ -69,6 +82,11 @@
         <button id="modeBtn" class="primary" title="Or press F">▶ Output mode (F)</button>
         <button id="fsBtn">⛶ Fullscreen</button>
       </div>
+      <div class="row">
+        <button id="fullWidthBtn" title="Keep the canvas full-size while editing">⛶ Full-width edit</button>
+        <button id="collapsePanel" title="Or press H in full-width edit">◀ Hide panel</button>
+      </div>
+      <p><strong>Full-width edit</strong> is the fix for mapping drift: the canvas stays full-window, exactly as in output mode, and this panel floats over it instead of shrinking it. Hide the panel to drag corners at full size, show it again to change settings — the shape will not shift when you switch to output.</p>
       <p><strong>Output mode</strong> hides this panel and shows only the black canvas. Press <strong>F</strong> (or the Exit button) to come back. On a projector, open this page on the projector itself and use Output mode — no second window is needed.</p>
     </div>
 
@@ -130,6 +148,7 @@
     <canvas id="gl"></canvas>
     <div id="grid"></div>
     <div class="topbar">
+      <button id="expandPanel" title="Or press H in full-width edit">☰ Show panel</button>
       <button id="exitOutput" title="Or press F">✕ Exit output</button>
     </div>
   </main>
@@ -427,6 +446,26 @@ document.getElementById('resetCorners').onclick=function(){ var s=selected(); if
 document.getElementById('gridToggle').onchange=function(e){ showGrid=e.target.checked; gridEl.classList.toggle('on',showGrid); };
 document.getElementById('patternToggle').onchange=function(e){ showPatternEverywhere=e.target.checked; surfaces.forEach(function(s){ s.textureSource=null; }); };
 
+/* ---------- Full-width edit mode ---------- */
+/* The whole point: in normal editor mode the panel takes 300px, so the
+   canvas is narrower than in output mode and the same corner fractions
+   land on a different-shaped quad. In full-width mode the canvas is
+   always 100vw x 100vh, panel shown or hidden, so what you drag is
+   exactly what the projector shows. */
+function setFullWidth(on){
+  document.body.classList.toggle('fullwidth', on);
+  if(!on) document.body.classList.remove('panel-hidden');
+  document.getElementById('fullWidthBtn').textContent=on?'✕ Exit full-width edit':'⛶ Full-width edit';
+  if(on){ gridEl.classList.toggle('on', showGrid); }
+}
+function togglePanel(){
+  if(!document.body.classList.contains('fullwidth')) return;
+  document.body.classList.toggle('panel-hidden');
+}
+document.getElementById('fullWidthBtn').onclick=function(){ setFullWidth(!document.body.classList.contains('fullwidth')); };
+document.getElementById('collapsePanel').onclick=togglePanel;
+document.getElementById('expandPanel').onclick=togglePanel;
+
 /* ---------- Output mode ---------- */
 function setOutput(on){
   document.body.classList.toggle('output', on);
@@ -443,7 +482,9 @@ document.getElementById('fsBtn').onclick=function(){
   else document.documentElement.requestFullscreen().catch(function(){});
 };
 document.addEventListener('keydown', function(e){
-  if(e.key==='f'||e.key==='F'){ if(document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='SELECT'||document.activeElement.tagName==='TEXTAREA')) return; toggleOutput(); }
+  if(document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='SELECT'||document.activeElement.tagName==='TEXTAREA')) return;
+  if(e.key==='f'||e.key==='F'){ toggleOutput(); }
+  if(e.key==='h'||e.key==='H'){ togglePanel(); }
   if(e.key==='Escape' && document.body.classList.contains('output')) setOutput(false);
 });
 
