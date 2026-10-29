@@ -7,6 +7,8 @@ Tecaki in mind), used in a single window on the projector itself.
 
 ### Try it: https://adamstirtan.github.io/projection-mapping/
 
+<img width="1421" height="713" alt="Screenshot 2026-10-28 at 11 07 10 PM" src="https://github.com/user-attachments/assets/e814b90f-cf2d-467e-ae53-da173e056929" />
+
 ## Use it
 
 1. Open the app (locally: open `index.html`; hosted: the GitHub Pages URL
