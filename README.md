@@ -5,6 +5,8 @@ dependencies, no account, no ads — just open `index.html` in a browser and it
 works offline. It is designed for a small Android projector (tested with a
 Tecaki in mind), used in a single window on the projector itself.
 
+### Try it: https://adamstirtan.github.io/projection-mapping/
+
 ## Use it
 
 1. Open the app (locally: open `index.html`; hosted: the GitHub Pages URL
